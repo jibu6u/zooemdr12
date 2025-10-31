@@ -278,119 +278,127 @@
     const cr=new Creature({kind:'billboard', frames:[f1,f2], idx:-1, tag:'__anim__'}); cr.animOn=true; cr.fps=10; cr.updateAnim(0.2); console.assert(cr.frameIndex!==0,'animation advanced');
   })();
 
-  
-// ===== Two Globes with Complementary Color =====
-(function(){
-  const hasTHREE = (typeof THREE!=='undefined');
-  if (!hasTHREE) return;
-  const scene = (typeof window.scene!=='undefined')? window.scene : (window.__scene || null);
-  const camera = (typeof window.camera!=='undefined')? window.camera : (window.__camera || null);
-  const renderer = (typeof window.renderer!=='undefined')? window.renderer : (window.__renderer || null);
-  if (!scene || !camera || !renderer) return;
+  </script>
 
-  const $ = (id)=>document.getElementById(id);
+<!-- Two Globes (Complementary Color) Patch -->
+<script type="module">
+(() => {
+  const ready = () =>
+    typeof THREE !== 'undefined' && window.scene && window.camera && window.renderer;
+  const waitReady = (cb) => {
+    const check = () => { if (ready()) cb(); else requestAnimationFrame(check); };
+    check();
+  };
 
-  // main globe (if not already defined)
-  if (!window.__bigGlobe){
-    const geo = new THREE.SphereGeometry(0.12, 48, 32);
-    const mat = new THREE.MeshStandardMaterial({ color:0xffffff, emissive:0x222222, emissiveIntensity:0.4, metalness:0.1, roughness:0.3 });
-    const m = new THREE.Mesh(geo, mat);
-    m.position.set(0,1.6,-1.0);
-    scene.add(m);
-    window.__bigGlobe = { mesh:m, t:0, hue:0, params:{ show:true, colorMode:'rainbow', spd:1.2, rad:2.0, yAmp:0.6, front:false, frontDist:0.9 } };
-  }
-  const globe = window.__bigGlobe;
+  waitReady(() => {
+    const scene = window.scene, camera = window.camera, renderer = window.renderer;
 
-  if (!window.__smallGlobe){
-    const geo = new THREE.SphereGeometry(0.08, 40, 28);
-    const mat = new THREE.MeshStandardMaterial({ color:0xffffff, emissive:0x222222, emissiveIntensity:0.35, metalness:0.1, roughness:0.35 });
-    const m = new THREE.Mesh(geo, mat);
-    m.position.set(0,1.6,-0.8);
-    scene.add(m);
-    window.__smallGlobe = { mesh:m, t:0, hue:0, params:{ show:true, spd:1.1, rad:1.4, yAmp:0.5, front:true, frontDist:0.8 } };
-  }
-  const globe2 = window.__smallGlobe;
+    const H = {
+      frontLock(dist = 0.9, lateral = 0){
+        const cam = (renderer.xr && renderer.xr.isPresenting) ? renderer.xr.getCamera(camera) : camera;
+        const camPos = new THREE.Vector3(); cam.getWorldPosition(camPos);
+        const fwd = new THREE.Vector3(); cam.getWorldDirection(fwd).normalize();
+        const up = new THREE.Vector3(0,1,0);
+        const right = new THREE.Vector3().crossVectors(fwd, up).normalize();
+        return camPos.clone().add(fwd.multiplyScalar(dist)).add(right.multiplyScalar(lateral||0));
+      },
+      setHue(mesh, h, eScale=0.35){
+        const c = new THREE.Color().setHSL(((h%1)+1)%1, 0.85, 0.55);
+        mesh.material.color.copy(c);
+        mesh.material.emissive.copy(c).multiplyScalar(eScale);
+        mesh.material.needsUpdate = true;
+      }
+    };
 
-  function setHue(mesh, h, eScale){
-    const c = new THREE.Color().setHSL((h%1+1)%1, 0.85, 0.55);
-    mesh.material.color.copy(c);
-    mesh.material.emissive.copy(c).multiplyScalar(eScale);
-    mesh.material.needsUpdate = true;
-  }
+    const S = window.__EMDR_TWO_GLOBES__ || (window.__EMDR_TWO_GLOBES__ = {
+      group: null,
+      t: 0,
+      hue: 0,
+      big: { mesh:null, baseSize:0.12, spd:1.2, rad:2.0, yAmp:0.6, front:false, frontDist:0.95 },
+      small:{ mesh:null, baseSize:0.08, spd:1.05, rad:1.4, yAmp:0.5, front:true,  frontDist:0.8 }
+    });
 
-  function frontLockPosition(dist, lateral){
-    const cam = renderer.xr && renderer.xr.isPresenting ? renderer.xr.getCamera(camera) : camera;
-    const camPos = new THREE.Vector3(); cam.getWorldPosition(camPos);
-    const forward = new THREE.Vector3(); cam.getWorldDirection(forward).normalize();
-    const up = new THREE.Vector3(0,1,0);
-    const right = new THREE.Vector3().crossVectors(forward, up).normalize();
-    return camPos.clone().add(forward.multiplyScalar(dist)).add(right.multiplyScalar(lateral||0));
-  }
-
-  function enforceFrontRule(){
-    if (!globe.params.front && !globe2.params.front){
-      globe2.params.front = true; const sel = $('g2Front'); if (sel) sel.value = 'on';
+    function ensureGroup(){
+      if (!S.group || !S.group.parent){
+        if (!S.group){
+          S.group = new THREE.Group();
+          S.group.name = "EMDR_TwoGlobes_Group";
+        }
+        scene.add(S.group);
+      }
     }
-  }
 
-  function step(dt){
-    // big globe
-    globe.mesh.visible = globe.params.show;
-    globe.t += dt * (globe.params.spd||1.2);
-    if (globe.params.front){
-      globe.mesh.position.copy( frontLockPosition(globe.params.frontDist||0.9, -0.15) );
-    } else {
-      const cam = renderer.xr && renderer.xr.isPresenting ? renderer.xr.getCamera(camera) : camera;
-      const camPos = new THREE.Vector3(); cam.getWorldPosition(camPos);
-      const r = (globe.params.rad||2.0)*(0.6+0.4*Math.sin(globe.t*0.33));
-      const x = Math.sin(globe.t*0.9)*r, z = Math.cos(globe.t*1.37)*r;
-      const y = 1.2 + Math.sin(globe.t*1.7)*(globe.params.yAmp||0.6);
-      globe.mesh.position.set(camPos.x+x,y,camPos.z+z);
+    function ensureMeshes(){
+      ensureGroup();
+      if (!S.big.mesh){
+        const geo = new THREE.SphereGeometry(S.big.baseSize, 48, 32);
+        const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x222222, emissiveIntensity: 0.4, metalness: 0.1, roughness: 0.3 });
+        S.big.mesh = new THREE.Mesh(geo, mat);
+        S.group.add(S.big.mesh);
+      }
+      if (!S.small.mesh){
+        const geo = new THREE.SphereGeometry(S.small.baseSize, 40, 28);
+        const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x222222, emissiveIntensity: 0.32, metalness: 0.1, roughness: 0.35 });
+        S.small.mesh = new THREE.Mesh(geo, mat);
+        S.group.add(S.small.mesh);
+      }
     }
-    if (globe.params.colorMode==='rainbow'){
-      globe.hue = (globe.hue + dt*0.12)%1;
+
+    function enforceFrontRule(){
+      if (!S.big.front && !S.small.front){
+        S.small.front = true;
+      }
     }
-    setHue(globe.mesh, globe.hue, 0.35);
 
-    // small globe: complementary color
-    globe2.mesh.visible = globe2.params.show;
-    globe2.t += dt * (globe2.params.spd||1.1);
-    if (globe2.params.front){
-      globe2.mesh.position.copy( frontLockPosition(globe2.params.frontDist||0.8, +0.15) );
-    } else {
-      const cam = renderer.xr && renderer.xr.isPresenting ? renderer.xr.getCamera(camera) : camera;
-      const camPos = new THREE.Vector3(); cam.getWorldPosition(camPos);
-      const r2 = (globe2.params.rad||1.4)*(0.6+0.4*Math.cos(globe2.t*0.27));
-      const x2 = Math.cos(globe2.t*1.05)*r2, z2 = Math.sin(globe2.t*1.31)*r2;
-      const y2 = 1.2 + Math.cos(globe2.t*1.4)*(globe2.params.yAmp||0.5);
-      globe2.mesh.position.set(camPos.x+x2,y2,camPos.z+z2);
+    window.__EMDR_TWO_GLOBES__ = S;
+
+    let last = performance.now();
+    function loop(){
+      ensureMeshes();
+      enforceFrontRule();
+
+      const now = performance.now();
+      const dt = Math.min(0.033, (now - last)/1000); last = now;
+      S.t += dt * 1.0;
+      S.hue = (S.hue + dt * 0.12) % 1;
+
+      if (S.big.front){
+        S.big.mesh.position.copy( H.frontLock(S.big.frontDist, -0.18) );
+      } else {
+        const cam = (renderer.xr && renderer.xr.isPresenting) ? renderer.xr.getCamera(camera) : camera;
+        const camPos = new THREE.Vector3(); cam.getWorldPosition(camPos);
+        const t = S.t * S.big.spd;
+        const r = S.big.rad * (0.6 + 0.4 * Math.sin(t * 0.33));
+        const x = Math.sin(t * 0.9) * r;
+        const z = Math.cos(t * 1.37) * r;
+        const y = 1.2 + Math.sin(t * 1.7) * S.big.yAmp;
+        S.big.mesh.position.set(camPos.x + x, y, camPos.z + z);
+      }
+      H.setHue(S.big.mesh, S.hue, 0.35);
+
+      if (S.small.front){
+        S.small.mesh.position.copy( H.frontLock(S.small.frontDist, +0.18) );
+      } else {
+        const cam = (renderer.xr && renderer.xr.isPresenting) ? renderer.xr.getCamera(camera) : camera;
+        const camPos = new THREE.Vector3(); cam.getWorldPosition(camPos);
+        const t2 = S.t * S.small.spd + 1.234;
+        const r2 = S.small.rad * (0.6 + 0.4 * Math.cos(t2 * 0.27));
+        const x2 = Math.cos(t2 * 1.05) * r2;
+        const z2 = Math.sin(t2 * 1.31) * r2;
+        const y2 = 1.2 + Math.cos(t2 * 1.4) * S.small.yAmp;
+        S.small.mesh.position.set(camPos.x + x2, y2, camPos.z + z2);
+      }
+      const compHue = (S.hue + 0.5) % 1;
+      H.setHue(S.small.mesh, compHue, 0.32);
+
+      if (!S.group.parent) scene.add(S.group);
+
+      requestAnimationFrame(loop);
     }
-    const compHue = (globe.hue + 0.5) % 1;
-    setHue(globe2.mesh, compHue, 0.32);
-  }
-
-  // UI bindings
-  const g2Show=$('g2Show'), g2Front=$('g2Front'), g2Spd=$('g2Spd'), g2Rad=$('g2Rad'), g2Y=$('g2Y');
-  if (g2Show) g2Show.addEventListener('input', e=>{ globe2.params.show=(e.target.value==='on'); });
-  if (g2Front) g2Front.addEventListener('input', e=>{
-    globe2.params.front=(e.target.value==='on');
-    if (!globe2.params.front && !globe.params.front){ globe2.params.front=true; e.target.value='on'; }
-  });
-  if (g2Spd) g2Spd.addEventListener('input', e=>{ globe2.params.spd=parseFloat(e.target.value)||1.1; $('g2SpdV').textContent=globe2.params.spd.toFixed(2); });
-  if (g2Rad) g2Rad.addEventListener('input', e=>{ globe2.params.rad=parseFloat(e.target.value)||1.4; $('g2RadV').textContent=globe2.params.rad.toFixed(2); });
-  if (g2Y)   g2Y.addEventListener('input', e=>{ globe2.params.yAmp=parseFloat(e.target.value)||0.5; $('g2YV').textContent=globe2.params.yAmp.toFixed(2); });
-
-  enforceFrontRule();
-
-  // piggyback on existing render loop; if not accessible, make our own lightweight loop
-  let last = performance.now();
-  function loop(){
-    const now = performance.now();
-    const dt = Math.min(0.033, (now-last)/1000); last = now;
-    try{ step(dt); }catch(e){ /* ignore */ }
     requestAnimationFrame(loop);
-  }
-  requestAnimationFrame(loop);
-})();</script>
+  });
+})();
+</script>
+
 </body>
 </html>
