@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mythic Zoo — WebXR (Quest/PC) · Wander Hologram</title>
+  <style>
+    html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#0a0b10; color:#e7eaf0; font-family:system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, Arial, sans-serif; }
+    #ui { position:fixed; top:12px; left:12px; z-index:10; background:rgba(10,12,16,.66); backdrop-filter: blur(6px); border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:10px 12px; width:420px; max-height:88vh; overflow:auto; }
+    #ui h1 { margin:0 0 8px 0; font-size:16px; letter-spacing:.2px; }
+    #ui .row { display:flex; align-items:center; gap:8px; margin:8px 0; }
+    #ui .col { display:flex; flex-direction:column; gap:6px; }
+    #ui label { font-size:13px; opacity:.95; min-width:86px; }
+    #ui input[type="range"], #ui select, #ui input[type="number"] { flex:1; }
+    #ui input[type="file"] { width:100%; }
+    #ui button { cursor:pointer; padding:6px 10px; border-radius:10px; background:#1b1f2a; color:#e7eaf0; border:1px solid rgba(255,255,255,.1); }
+    #ui button:hover { background:#222838; }
+    #ui small { opacity:.85; }
+    #hint { font-size:12px; opacity:.85; line-height:1.4; margin-top:6px; }
+    #drop { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(84,132,255,.12); border:2px dashed rgba(84,132,255,.5); color:#cdd8ff; font-size:20px; z-index:9; }
+    #err { position:fixed; right:12px; bottom:12px; background:rgba(255,0,0,.12); border:1px solid rgba(255,0,0,.35); color:#ffd6d6; padding:10px 12px; border-radius:12px; display:none; max-width:40vw; z-index:11; font-size:12px; white-space:pre-wrap; }
+    #gear { position:fixed; top:12px; right:12px; z-index:12; width:42px; height:42px; border-radius:50%; border:1px solid rgba(255,255,255,.2); background:rgba(20,24,34,.7); display:flex; align-items:center; justify-content:center; cursor:pointer; user-select:none; }
+    #gear:hover { background:rgba(30,36,52,.85); }
+    #vrTip { position:fixed; bottom:14px; left:14px; z-index:10; background:rgba(10,12,16,.66); border:1px solid rgba(255,255,255,.08); padding:8px 10px; border-radius:10px; font-size:12px; }
+    .subtle { opacity:.85; font-size:12px; }
+    .divider { height:1px; background:rgba(255,255,255,.08); margin:6px 0 8px; }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <h1>🦁 Mythic Zoo — Wander Hologram</h1>
+    <div class="row"><input id="file" type="file" accept="image/*" multiple></div>
+
+    <div class="row"><label>모드(기본)</label>
+      <select id="mode">
+        <option value="parallax">홀로그램(패럴랙스 레이어)</option>
+        <option value="depth">홀로그램(깊이 변형: 업로드 이미지 권장)</option>
+        <option value="billboard">단일 평면</option>
+      </select>
+    </div>
+    <div class="row"><label>레이어(기본) <span id="layerVal">3</span></label><input id="layers" type="range" min="1" max="9" step="1" value="3"></div>
+    <div class="row" id="depthRow" style="display:none"><label>깊이(기본) <span id="depthVal">0.060</span></label><input id="depthScale" type="range" min="0" max="0.2" step="0.0025" value="0.06"></div>
+    <div class="row"><label>활동 반경 <span id="arenaVal">3.5</span>m</label><input id="arena" type="range" min="2" max="8" step="0.1" value="3.5"></div>
+    <div class="row"><label>자유 이동</label><select id="wanderEn"><option value="on">켜기</option><option value="off">끄기</option></select></div>
+    <div class="row"><label>속도 <span id="spdVal">0.55</span>m/s</label><input id="wanderSpd" type="range" min="0" max="2" step="0.01" value="0.55"></div>
+    <div class="row"><label>회전 <span id="turnVal">1.20</span>rad/s</label><input id="turnRate" type="range" min="0.2" max="3" step="0.05" value="1.2"></div>
+    <div class="row"><label>회피 <span id="sepVal">0.60</span></label><input id="separation" type="range" min="0" max="1.5" step="0.05" value="0.6"></div>
+    <div class="row"><label>바운스 <span id="bobVal">0.18</span></label><input id="bobAmp" type="range" min="0" max="0.6" step="0.01" value="0.18"></div>
+
+    <div class="divider"></div>
+    <div class="col">
+      <b>스프라이트 분할(한 이미지에 여러 포즈)</b>
+      <div class="row"><label>분할</label>
+        <select id="sliceEn"><option value="off">끄기(1x1)</option><option value="on">켜기</option></select>
+      </div>
+      <div class="row"><label>행×열</label>
+        <input id="sliceRows" type="number" min="1" max="8" step="1" value="1">
+        <input id="sliceCols" type="number" min="1" max="8" step="1" value="1">
+      </div>
+      <div class="row"><label>애니메이션</label>
+        <select id="sliceAnim"><option value="on">켜기(1마리로 포즈 순환)</option><option value="off">끄기(포즈별 여러 마리)</option></select>
+      </div>
+      <div class="row"><label>FPS <span id="sliceFPSVal">4</span></label><input id="sliceFPS" type="range" min="1" max="15" step="1" value="4"></div>
+      <small class="subtle">예: 2×2 분할 + 애니메이션=켜기 → 1마리가 4포즈로 자연스럽게 변함</small>
+    </div>
+
+    <div class="divider"></div>
+    <div class="col">
+      <b>VIP(해태) 강조</b>
+      <div class="row"><label>VIP</label><select id="vipEn"><option value="on">켜기</option><option value="off">끄기</option></select></div>
+      <div class="row"><label>크기 <span id="vipScaleVal">1.40</span>x</label><input id="vipScale" type="range" min="1" max="2.2" step="0.05" value="1.4"></div>
+      <div class="row"><button id="markVIP">마지막 추가를 VIP로</button></div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="col">
+      <b>개체별 설정(저장/불러오기)</b>
+      <div class="row"><label>동물 선택</label><select id="creSel"></select></div>
+      <div class="row"><label>모드</label>
+        <select id="creMode">
+          <option value="parallax">패럴랙스</option>
+          <option value="depth">깊이</option>
+          <option value="billboard">평면</option>
+        </select>
+      </div>
+      <div class="row"><label>크기 <span id="creScaleVal">1.00</span>x</label><input id="creScale" type="range" min="0.4" max="3" step="0.01" value="1"></div>
+      <div class="row"><label>속도 <span id="creSpdVal">0.55</span></label><input id="creSpd" type="range" min="0" max="3" step="0.01" value="0.55"></div>
+      <div class="row"><label>회전 <span id="creTurnVal">1.20</span></label><input id="creTurn" type="range" min="0.2" max="4" step="0.05" value="1.2"></div>
+      <div class="row" id="creLayerRow"><label>레이어 <span id="creLayerVal">3</span></label><input id="creLayers" type="range" min="1" max="9" step="1" value="3"></div>
+      <div class="row" id="creDepthRow" style="display:none"><label>깊이 <span id="creDepthVal">0.060</span></label><input id="creDepth" type="range" min="0" max="0.2" step="0.0025" value="0.06"></div>
+      <div class="row"><label>애니메이션</label><select id="creAnim"><option value="on">켜기</option><option value="off">끄기</option></select></div>
+      <div class="row"><label>FPS <span id="creFPSVal">4</span></label><input id="creFPS" type="range" min="1" max="15" step="1" value="4"></div>
+      <div class="row"><button id="saveProfile">이 동물 설정 저장</button><button id="removeOne">선택 삭제</button></div>
+      <small class="subtle">이미지 파일명을 키로 로컬 저장소에 저장됩니다. 같은 이미지를 다시 올리면 자동 적용.</small>
+    </div>
+
+    <div class="divider"></div>
+    <div class="row"><button id="addSamples">샘플 3장 추가</button><button id="clear">모두 지우기</button><button id="toggleUI">패널 숨김</button></div>
+    <div id="hint">이미지를 업로드하면 홀로그램 카드가 생성되고, <b>자유 이동</b>이 켜져 있으면 스스로 걸어 다닙니다.<br>키보드: <b>Enter</b> 샘플추가/일시정지, <b>F1</b> 또는 <b⚙️</b> 패널 토글, <b>R</b> 리셋, <b>E</b> 에러창.<br><b>VR 시작은 하단 파란 버튼(VR)</b>을 눌러야 합니다.</div>
+  </div>
+  <div id="gear" title="패널 토글(클릭)">⚙️</div>
+  <div id="vrTip">VR 버튼을 누르면 Quest에서 입장합니다. HTTPS 권장.</div>
+  <div id="drop">이미지 파일을 여기에 놓으세요</div>
+  <div id="err"></div>
+
+  <!-- Three.js via esm.sh so all internal bare imports resolve to absolute URLs -->
+  <script type="module">
+  import * as THREE from 'https://esm.sh/three@0.156.1';
+  import { OrbitControls } from 'https://esm.sh/three@0.156.1/examples/jsm/controls/OrbitControls.js';
+  import { VRButton } from 'https://esm.sh/three@0.156.1/examples/jsm/webxr/VRButton.js';
+
+  // --- util
+  function angleDiff(a,b){ let d=(b-a+Math.PI)%(Math.PI*2); if(d<0) d+=Math.PI*2; return d-Math.PI; }
+  const $=id=>document.getElementById(id);
+
+  // --- global state
+  const state={
+    creatures:[],
+    mode:'parallax', layers:3, depthScale:0.06,
+    arena:3.5, wanderOn:true, wanderSpd:0.55, turnRate:1.2, separation:0.6, bobAmp:0.18,
+    paused:false,
+    vipIndex:-1, vipScale:1.4, vipEnabled:true,
+    sliceEnabled:false, sliceRows:1, sliceCols:1, sliceAnim:true, sliceFPS:4
+  };
+
+  // --- renderer/scene/camera
+  const renderer=new THREE.WebGLRenderer({antialias:true, alpha:false});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  renderer.setSize(window.innerWidth,window.innerHeight);
+  renderer.xr.enabled=true; renderer.xr.setReferenceSpaceType('local-floor');
+  document.body.appendChild(renderer.domElement);
+  const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0a0b10);
+  const camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight,0.1,100); camera.position.set(0,1.6,5);
+  const controls=new OrbitControls(camera,renderer.domElement); controls.target.set(0,1.3,0); controls.enableDamping=true;
+  const hemi=new THREE.HemisphereLight(0xbfd8ff,0x1a1a1a,0.9); scene.add(hemi);
+  const dir=new THREE.DirectionalLight(0xffffff,0.9); dir.position.set(3,5,2); scene.add(dir);
+  const floor=new THREE.Mesh(new THREE.CylinderGeometry(9,9,0.05,64), new THREE.MeshStandardMaterial({color:0x10131c, metalness:0.1, roughness:0.9})); floor.position.y=-0.025; floor.receiveShadow=true; scene.add(floor);
+  const ringGeo=new THREE.RingGeometry(0.02,0.03,64); const ringMat=new THREE.MeshBasicMaterial({color:0x5383ff, side:THREE.DoubleSide});
+  const arenaRing=new THREE.Mesh(ringGeo,ringMat); arenaRing.position.y=0.001; arenaRing.rotation.x=-Math.PI/2; arenaRing.scale.set(state.arena,state.arena,1); scene.add(arenaRing);
+  document.body.appendChild(VRButton.createButton(renderer));
+  const errBox=$('err'); function showErr(msg){ errBox.style.display='block'; errBox.textContent=`에러: ${msg}`; } function hideErr(){ errBox.style.display='none'; }
+  window.addEventListener('resize',()=>{ camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth,window.innerHeight); });
+
+  // --- maps/textures
+  function makeDisplacementMap(img){ const c=document.createElement('canvas'); const w=Math.min(512,img.width), h=Math.min(512,img.height); c.width=w; c.height=h; const cx=c.getContext('2d'); cx.drawImage(img,0,0,w,h); let data; try{ data=cx.getImageData(0,0,w,h).data; }catch(e){ console.warn('CORS tainted canvas; fallback to parallax'); return null; } const gray=new Uint8Array(w*h*4); for(let i=0,j=0;i<data.length;i+=4,j+=4){ const g=(data[i]*0.299+data[i+1]*0.587+data[i+2]*0.114)|0; gray[j]=gray[j+1]=gray[j+2]=g; gray[j+3]=255; } const tex=new THREE.DataTexture(gray,w,h,THREE.RGBAFormat); tex.needsUpdate=true; tex.colorSpace=THREE.SRGBColorSpace; return tex; }
+  async function imageFromFile(file){ const url=URL.createObjectURL(file); const img=new Image(); img.src=url; await img.decode().catch(()=>new Promise(res=>img.onload=res)); return img; }
+  function textureFromImage(img){ const tex=new THREE.Texture(img); tex.needsUpdate=true; tex.colorSpace=THREE.SRGBColorSpace; return tex; }
+  function textureFromCanvas(can){ const tex=new THREE.CanvasTexture(can); tex.needsUpdate=true; tex.colorSpace=THREE.SRGBColorSpace; return tex; }
+  function sliceImageToCanvases(img, rows, cols){ const arr=[]; const cw=Math.floor(img.width/cols), ch=Math.floor(img.height/rows); for(let r=0;r<rows;r++){ for(let c=0;c<cols;c++){ const can=document.createElement('canvas'); can.width=cw; can.height=ch; const cx=can.getContext('2d'); cx.drawImage(img,c*cw,r*ch,cw,ch,0,0,cw,ch); arr.push(can); } } return arr; }
+
+  // --- Creature
+  class Creature{
+    constructor({kind, frames, idx, tag}){
+      this.kind=kind; this.group=new THREE.Group(); this.phase=Math.random()*Math.PI*2; this.heading=Math.random()*Math.PI*2; this.targetTurn=0;
+      this.speed=state.wanderSpd; this.turnRate=state.turnRate; this.scale=1; this.layers=state.layers; this.depth=state.depthScale;
+      this.frames=frames; this.frameIndex=0; this.frameAcc=0; this.animOn=(frames && frames.length>1); this.fps=state.sliceFPS; this.tag=tag||'';
+      this.aspect=frames[0].aspect; this.materials=[]; this.dispTex=null;
+      this.buildVisual(frames[0].tex, frames[0]);
+      const r=Math.random()*state.arena*0.8, a=Math.random()*Math.PI*2; this.group.position.set(Math.cos(a)*r,1.15,Math.sin(a)*r); this.group.rotation.y=this.heading+Math.PI;
+      if(idx===state.vipIndex && state.vipEnabled) this.setVIP(true);
+    }
+    buildVisual(tex, frame){ while(this.group.children.length) this.group.remove(this.group.children[0]); this.materials.length=0; const w=1.5, h=w/this.aspect; if(this.kind==='depth'){
+        if(!this.dispTex){ this.dispTex=makeDisplacementMap(frame.img); if(!this.dispTex){ this.kind='parallax'; } }
+      }
+      if(this.kind==='depth'){
+        const geo=new THREE.PlaneGeometry(w,h,96,96);
+        const mat=new THREE.MeshStandardMaterial({ map:tex, displacementMap:this.dispTex, displacementScale:this.depth, transparent:true, alphaTest:0.01, side:THREE.DoubleSide, roughness:0.85, metalness:0.05 });
+        const mesh=new THREE.Mesh(geo,mat); this.group.add(mesh); this.materials.push(mat);
+      } else if(this.kind==='parallax'){
+        const L=Math.max(1,Math.floor(this.layers)); const depth=0.06; const mat=new THREE.MeshStandardMaterial({ map:tex, transparent:true, alphaTest:0.01, side:THREE.DoubleSide, roughness:0.85, metalness:0.05 });
+        for(let i=0;i<L;i++){ const t=(i/(L-1||1))-.5; const plane=new THREE.Mesh(new THREE.PlaneGeometry(w,h,1,1),mat); plane.position.z=t*depth; this.group.add(plane); }
+        this.materials.push(mat); // shared material for all layers
+      } else { // billboard
+        const mat=new THREE.MeshStandardMaterial({ map:tex, transparent:true, alphaTest:0.01, side:THREE.DoubleSide, roughness:0.85, metalness:0.05 });
+        const mesh=new THREE.Mesh(new THREE.PlaneGeometry(w,h,1,1),mat); this.group.add(mesh); this.materials.push(mat);
+      }
+      this.group.scale.setScalar(this.scale);
+    }
+    setVIP(on){ const s=on?state.vipScale:this.scale; this.group.scale.setScalar(s); this.group.traverse(o=>{ if(o.isMesh&&o.material){ o.material.emissive=new THREE.Color(on?0x333333:0x000000); o.material.emissiveIntensity=on?0.6:0; o.material.needsUpdate=true; }}); }
+    setFrame(i){ if(!this.frames||this.frames.length===0) return; this.frameIndex=(i%this.frames.length+this.frames.length)%this.frames.length; const F=this.frames[this.frameIndex]; for(const m of this.materials){ m.map=F.tex; m.needsUpdate=true; } /* aspect 동일 가정(균일 분할) */ }
+    updateAnim(dt){ if(this.animOn && this.frames && this.frames.length>1){ const dur=1/Math.max(1,this.fps); this.frameAcc+=dt; while(this.frameAcc>=dur){ this.frameAcc-=dur; this.setFrame(this.frameIndex+1); } } }
+    steer(dt,others){ if(!state.wanderOn) { this.updateAnim(dt); return; } this.targetTurn+=(Math.random()-0.5)*this.turnRate*0.5*dt; this.targetTurn=THREE.MathUtils.clamp(this.targetTurn,-this.turnRate,this.turnRate); this.heading+=this.targetTurn*dt; const pos=this.group.position; const r=Math.hypot(pos.x,pos.z), maxR=state.arena*0.98; if(r>maxR){ const back=Math.atan2(-pos.z,-pos.x); const diff=angleDiff(this.heading,back); this.heading+=THREE.MathUtils.clamp(diff,-this.turnRate*dt*2,this.turnRate*dt*2); } if(state.separation>0&&others&&others.length){ let ax=0,az=0; for(const o of others){ if(o===this) continue; const dx=pos.x-o.group.position.x, dz=pos.z-o.group.position.z; const d2=dx*dx+dz*dz; const minD=0.9; if(d2>1e-4&&d2<minD*minD){ const inv=1/Math.sqrt(d2); ax+=dx*inv; az+=dz*inv; } } if(ax||az){ const repel=Math.atan2(az,ax); const diff=angleDiff(this.heading,repel); this.heading+=THREE.MathUtils.clamp(diff,-this.turnRate*dt*2,this.turnRate*dt*2); } }
+      pos.x+=Math.cos(this.heading)*this.speed*dt; pos.z+=Math.sin(this.heading)*this.speed*dt; this.group.rotation.y=Math.PI+this.heading; const t=performance.now()*0.001; this.group.position.y=1.15+Math.sin(t+this.phase)*state.bobAmp; this.updateAnim(dt); }
+  }
+
+  // --- persistence
+  function profileKey(tag){ return `mythiczoo:profile:${tag}`; }
+  function tryLoadProfile(tag){ try{ const j=localStorage.getItem(profileKey(tag)); return j? JSON.parse(j): null; }catch{ return null; } }
+  function saveProfile(tag, p){ try{ localStorage.setItem(profileKey(tag), JSON.stringify(p)); }catch(e){ showErr('프로필 저장 실패: '+e.message); } }
+
+  // --- creature management
+  function addCreature(kind, frames, tag){ const c=new Creature({kind, frames, idx:state.creatures.length, tag}); scene.add(c.group); state.creatures.push(c); refreshCreatureList(); return c; }
+  function removeCreature(idx){ if(idx<0||idx>=state.creatures.length) return; const c=state.creatures[idx]; scene.remove(c.group); state.creatures.splice(idx,1); refreshCreatureList(); if(state.vipIndex===idx) state.vipIndex=-1; }
+
+  // --- UI: list/select & inspector
+  const creSel=$('creSel'); const creMode=$('creMode'); const creScale=$('creScale'); const creLayers=$('creLayers'); const creDepth=$('creDepth'); const creLayerRow=$('creLayerRow'); const creDepthRow=$('creDepthRow'); const creSpd=$('creSpd'); const creTurn=$('creTurn'); const creAnim=$('creAnim'); const creFPS=$('creFPS');
+  function refreshCreatureList(){ creSel.innerHTML=''; state.creatures.forEach((c,i)=>{ const opt=document.createElement('option'); opt.value=String(i); const animTag=(c.animOn&&c.frames.length>1)?' 🎞️':''; opt.textContent=`#${i} ${c.tag||'동물'}${animTag}`; creSel.appendChild(opt); }); if(state.creatures.length>0){ creSel.value=String(state.creatures.length-1); syncInspector(); } }
+  function syncInspector(){ const i=parseInt(creSel.value||'-1',10); const c=state.creatures[i]; if(!c) return; creMode.value=c.kind; creScale.value=c.scale; $('creScaleVal').textContent=Number(c.scale).toFixed(2); creLayers.value=c.layers; $('creLayerVal').textContent=c.layers; creDepth.value=c.depth; $('creDepthVal').textContent=Number(c.depth).toFixed(3); creSpd.value=c.speed; $('creSpdVal').textContent=Number(c.speed).toFixed(2); creTurn.value=c.turnRate; $('creTurnVal').textContent=Number(c.turnRate).toFixed(2); creLayerRow.style.display=(c.kind==='parallax')?'flex':'none'; creDepthRow.style.display=(c.kind==='depth')?'flex':'none'; creAnim.value=c.animOn?'on':'off'; creFPS.value=c.fps; $('creFPSVal').textContent=c.fps; }
+  creSel.addEventListener('change', syncInspector);
+  creMode.addEventListener('input', ()=>{ const i=parseInt(creSel.value||'-1',10); const c=state.creatures[i]; if(!c) return; c.kind=creMode.value; c.buildVisual(c.frames[c.frameIndex].tex, c.frames[c.frameIndex]); syncInspector(); });
+  creScale.addEventListener('input', ()=>{ const i=parseInt(creSel.value||'-1',10); const c=state.creatures[i]; if(!c) return; c.scale=parseFloat(creScale.value); $('creScaleVal').textContent=c.scale.toFixed(2); c.group.scale.setScalar(c.scale); });
+  creLayers.addEventListener('input', ()=>{ const i=parseInt(creSel.value||'-1',10); const c=state.creatures[i]; if(!c) return; c.layers=parseInt(creLayers.value,10); $('creLayerVal').textContent=c.layers; c.buildVisual(c.frames[c.frameIndex].tex, c.frames[c.frameIndex]); });
+  creDepth.addEventListener('input', ()=>{ const i=parseInt(creSel.value||'-1',10); const c=state.creatures[i]; if(!c) return; c.depth=parseFloat(creDepth.value); $('creDepthVal').textContent=c.depth.toFixed(3); c.group.traverse(o=>{ if(o.isMesh&&o.material&&o.material.displacementMap){ o.material.displacementScale=c.depth; o.material.needsUpdate=true; }}); });
+  creSpd.addEventListener('input', ()=>{ const i=parseInt(creSel.value||'-1',10); const c=state.creatures[i]; if(!c) return; c.speed=parseFloat(creSpd.value); $('creSpdVal').textContent=c.speed.toFixed(2); });
+  creTurn.addEventListener('input', ()=>{ const i=parseInt(creSel.value||'-1',10); const c=state.creatures[i]; if(!c) return; c.turnRate=parseFloat(creTurn.value); $('creTurnVal').textContent=c.turnRate.toFixed(2); });
+  creAnim.addEventListener('input', ()=>{ const i=parseInt(creSel.value||'-1',10); const c=state.creatures[i]; if(!c) return; c.animOn=(creAnim.value==='on'); });
+  creFPS.addEventListener('input', ()=>{ const i=parseInt(creSel.value||'-1',10); const c=state.creatures[i]; if(!c) return; c.fps=parseInt(creFPS.value,10); $('creFPSVal').textContent=c.fps; });
+  $('saveProfile').addEventListener('click', ()=>{ const i=parseInt(creSel.value||'-1',10); const c=state.creatures[i]; if(!c) return; const prof={ kind:c.kind, scale:c.scale, layers:c.layers, depth:c.depth, speed:c.speed, turn:c.turnRate, anim:c.animOn, fps:c.fps }; if(!c.tag){ showErr('이미지 태그(파일명)가 없어 저장 불가'); return; } saveProfile(c.tag, prof); hideErr(); });
+  $('removeOne').addEventListener('click', ()=>{ const i=parseInt(creSel.value||'-1',10); removeCreature(i); });
+
+  // --- Files: addFiles with optional slicing/animation
+  async function addFiles(files){ try{ hideErr(); let created=0; for(const f of files){ if(!(f && (f.type.startsWith('image/')))) continue; const baseTag=(f.name||'image'); const img=await imageFromFile(f);
+      const applyProfile=(c)=>{ const prof=tryLoadProfile(c.tag); if(prof){ c.kind=prof.kind??c.kind; c.scale=prof.scale??c.scale; c.layers=prof.layers??c.layers; c.depth=prof.depth??c.depth; c.speed=prof.speed??c.speed; c.turnRate=prof.turn??c.turnRate; c.animOn=prof.anim??c.animOn; c.fps=prof.fps??c.fps; c.buildVisual(c.frames[c.frameIndex].tex, c.frames[c.frameIndex]); } };
+      if(state.sliceEnabled && (state.sliceRows>1 || state.sliceCols>1)){
+        const cells=sliceImageToCanvases(img, state.sliceRows, state.sliceCols);
+        if(state.sliceAnim && cells.length>1){ // === single creature with frames ===
+          const frames=cells.map((cell,i)=>({ tex:textureFromCanvas(cell), img:cell, aspect:cell.width/cell.height }));
+          const c=addCreature(state.mode, frames, baseTag);
+          c.animOn=true; c.fps=state.sliceFPS; if(state.vipIndex<0){ state.vipIndex=0; c.setVIP(state.vipEnabled); }
+          applyProfile(c); created++;
+        } else { // === multiple creatures ===
+          let idx=0; for(const cell of cells){ const frames=[{ tex:textureFromCanvas(cell), img:cell, aspect:cell.width/cell.height }]; const c=addCreature(state.mode, frames, `${baseTag}#r${Math.floor(idx/state.sliceCols)}c${idx%state.sliceCols}`); if(state.vipIndex<0){ state.vipIndex=0; c.setVIP(state.vipEnabled);} applyProfile(c); created++; idx++; }
+        }
+      } else {
+        const frames=[{ tex:textureFromImage(img), img, aspect:img.width/img.height }]; const c=addCreature(state.mode, frames, baseTag); if(state.vipIndex<0){ state.vipIndex=0; c.setVIP(state.vipEnabled);} applyProfile(c); created++;
+      }
+    }
+    if(created===0){ showErr('유효한 이미지가 추가되지 않았습니다. 파일 형식 또는 권한을 확인하세요.'); }
+  }catch(e){ console.error(e); showErr(e.message||String(e)); } }
+
+  // --- Drag & drop
+  const drop=$('drop');
+  window.addEventListener('dragenter',e=>{ e.preventDefault(); drop.style.display='flex'; });
+  window.addEventListener('dragover',e=>{ e.preventDefault(); drop.style.display='flex'; });
+  window.addEventListener('dragleave',e=>{ e.preventDefault(); drop.style.display='none'; });
+  window.addEventListener('drop', async e=>{ e.preventDefault(); drop.style.display='none'; await addFiles(e.dataTransfer.files); });
+
+  // --- Global UI bindings
+  $('file').addEventListener('change', e=> addFiles(e.target.files));
+  $('mode').addEventListener('input', e=>{ state.mode=e.target.value; $('depthRow').style.display = state.mode==='depth' ? 'flex':'none'; });
+  $('layers').addEventListener('input', e=>{ state.layers=parseInt(e.target.value,10); $('layerVal').textContent=state.layers; });
+  $('depthScale').addEventListener('input', e=>{ state.depthScale=parseFloat(e.target.value); $('depthVal').textContent=state.depthScale.toFixed(3); });
+  $('arena').addEventListener('input', e=>{ state.arena=parseFloat(e.target.value); $('arenaVal').textContent=state.arena.toFixed(1); arenaRing.scale.set(state.arena,state.arena,1); });
+  $('wanderEn').addEventListener('input', e=>{ state.wanderOn=(e.target.value==='on'); });
+  $('wanderSpd').addEventListener('input', e=>{ state.wanderSpd=parseFloat(e.target.value); $('spdVal').textContent=state.wanderSpd.toFixed(2); state.creatures.forEach(c=>c.speed=state.wanderSpd); });
+  $('turnRate').addEventListener('input', e=>{ state.turnRate=parseFloat(e.target.value); $('turnVal').textContent=state.turnRate.toFixed(2); state.creatures.forEach(c=>c.turnRate=state.turnRate); });
+  $('separation').addEventListener('input', e=>{ state.separation=parseFloat(e.target.value); $('sepVal').textContent=state.separation.toFixed(2); });
+  $('bobAmp').addEventListener('input', e=>{ state.bobAmp=parseFloat(e.target.value); $('bobVal').textContent=state.bobAmp.toFixed(2); });
+  $('vipScale').addEventListener('input', e=>{ state.vipScale=parseFloat(e.target.value); $('vipScaleVal').textContent=state.vipScale.toFixed(2); const vip=state.creatures[state.vipIndex]; if(vip) vip.setVIP(state.vipEnabled); });
+  $('vipEn').addEventListener('input', e=>{ state.vipEnabled=(e.target.value==='on'); const vip=state.creatures[state.vipIndex]; if(vip) vip.setVIP(state.vipEnabled); });
+  $('markVIP').addEventListener('click', ()=>{ if(state.creatures.length===0) return; if(state.vipIndex>=0&&state.vipIndex<state.creatures.length) state.creatures[state.vipIndex].setVIP(false); state.vipIndex=state.creatures.length-1; state.creatures[state.vipIndex].setVIP(state.vipEnabled); });
+  $('toggleUI').addEventListener('click', ()=>{ const ui=$('ui'); ui.style.display=ui.style.display==='none'?'block':'none'; }); $('gear').addEventListener('click', ()=>{ const ui=$('ui'); ui.style.display=ui.style.display==='none'?'block':'none'; });
+  $('sliceEn').addEventListener('input', e=>{ state.sliceEnabled=(e.target.value==='on'); });
+  $('sliceRows').addEventListener('input', e=>{ state.sliceRows=Math.max(1,parseInt(e.target.value,10)||1); });
+  $('sliceCols').addEventListener('input', e=>{ state.sliceCols=Math.max(1,parseInt(e.target.value,10)||1); });
+  $('sliceAnim').addEventListener('input', e=>{ state.sliceAnim=(e.target.value==='on'); });
+  $('sliceFPS').addEventListener('input', e=>{ state.sliceFPS=parseInt(e.target.value,10); $('sliceFPSVal').textContent=state.sliceFPS; });
+
+  $('addSamples').addEventListener('click', async ()=>{ const urls=['https://images.unsplash.com/photo-1542601098-8fc114e148e2?q=80&w=1200&auto=format&fit=crop','https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1200&auto=format&fit=crop','https://images.unsplash.com/photo-1546182990-dffeafbe841d?q=80&w=1200&auto=format&fit=crop']; for(const url of urls){ const img=new Image(); img.crossOrigin='anonymous'; img.src=url; await img.decode().catch(()=>new Promise(res=>img.onload=res)); const frames=[{ tex:textureFromImage(img), img, aspect:img.width/img.height }]; const c=addCreature(state.mode, frames, '샘플'); if(state.vipIndex<0){ state.vipIndex=0; c.setVIP(state.vipEnabled);} } });
+  $('clear').addEventListener('click', ()=>{ state.creatures.forEach(c=>scene.remove(c.group)); state.creatures.length=0; refreshCreatureList(); state.vipIndex=-1; });
+
+  // --- keys
+  window.addEventListener('keydown', e=>{ if(e.code==='F1'){ e.preventDefault(); const ui=$('ui'); ui.style.display=ui.style.display==='none'?'block':'none'; } if(e.code==='Space'){ state.paused=!state.paused; } if(e.code==='Enter'){ if(state.creatures.length===0) $('addSamples').click(); else state.paused=!state.paused; } if(e.code==='KeyE'){ errBox.style.display=errBox.style.display==='none'?'block':'none'; } if(e.code==='KeyR'){ $('clear').click(); } });
+
+  // --- animate
+  const clock=new THREE.Clock(); function render(){ try{ const dt=Math.min(0.033,clock.getDelta()); if(!state.paused){ controls.update(); const arr=state.creatures; for(let i=0;i<arr.length;i++) arr[i].steer(dt,arr); } renderer.render(scene,camera); }catch(err){ console.error(err); showErr(err.message||String(err)); } } renderer.setAnimationLoop(render);
+
+  // --- tests (do not remove)
+  (function(){ console.assert(!!THREE && !!THREE.WebGLRenderer,'THREE loaded'); console.assert(typeof OrbitControls==='function','OrbitControls available'); console.assert(typeof VRButton.createButton==='function','VRButton available'); console.assert(Math.abs(angleDiff(0,Math.PI)-Math.PI)<1e-6,'angleDiff ok'); })();
+  (async function(){ // displacement & creature build
+    const c=document.createElement('canvas'); c.width=4; c.height=4; const x=c.getContext('2d'); const g=x.createLinearGradient(0,0,4,4); g.addColorStop(0,'#000'); g.addColorStop(1,'#fff'); x.fillStyle=g; x.fillRect(0,0,4,4); const img=new Image(); img.src=c.toDataURL('image/png'); await img.decode().catch(()=>new Promise(res=>img.onload=res)); const disp=makeDisplacementMap(img); console.assert(!!disp && disp.isTexture,'disp created'); const tex=textureFromImage(img); const frames=[{tex,img,aspect:1}]; const cr=new Creature({kind:'parallax',frames,idx:-1,tag:'__t__'}); console.assert(cr.group.children.length>=1,'Creature built'); })();
+  (function(){ // profile round-trip
+    const tag='__test__'; const p={kind:'billboard',scale:1.2,layers:5,depth:0.03,speed:0.9,turn:1.7,anim:true,fps:7}; saveProfile(tag,p); const got=tryLoadProfile(tag); console.assert(got && got.scale===1.2 && got.layers===5 && got.fps===7 && got.anim===true,'profile r/w'); })();
+  (function(){ // animation frames advance
+    const can1=document.createElement('canvas'); can1.width=8; can1.height=8; const a=can1.getContext('2d'); a.fillStyle='#000'; a.fillRect(0,0,8,8);
+    const can2=document.createElement('canvas'); can2.width=8; can2.height=8; const b=can2.getContext('2d'); b.fillStyle='#fff'; b.fillRect(0,0,8,8);
+    const f1={tex:textureFromCanvas(can1), img:can1, aspect:1}; const f2={tex:textureFromCanvas(can2), img:can2, aspect:1};
+    const cr=new Creature({kind:'billboard', frames:[f1,f2], idx:-1, tag:'__anim__'}); cr.animOn=true; cr.fps=10; cr.updateAnim(0.2); console.assert(cr.frameIndex!==0,'animation advanced');
+  })();
+
+  
+// ===== Two Globes with Complementary Color =====
+(function(){
+  const hasTHREE = (typeof THREE!=='undefined');
+  if (!hasTHREE) return;
+  const scene = (typeof window.scene!=='undefined')? window.scene : (window.__scene || null);
+  const camera = (typeof window.camera!=='undefined')? window.camera : (window.__camera || null);
+  const renderer = (typeof window.renderer!=='undefined')? window.renderer : (window.__renderer || null);
+  if (!scene || !camera || !renderer) return;
+
+  const $ = (id)=>document.getElementById(id);
+
+  // main globe (if not already defined)
+  if (!window.__bigGlobe){
+    const geo = new THREE.SphereGeometry(0.12, 48, 32);
+    const mat = new THREE.MeshStandardMaterial({ color:0xffffff, emissive:0x222222, emissiveIntensity:0.4, metalness:0.1, roughness:0.3 });
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(0,1.6,-1.0);
+    scene.add(m);
+    window.__bigGlobe = { mesh:m, t:0, hue:0, params:{ show:true, colorMode:'rainbow', spd:1.2, rad:2.0, yAmp:0.6, front:false, frontDist:0.9 } };
+  }
+  const globe = window.__bigGlobe;
+
+  if (!window.__smallGlobe){
+    const geo = new THREE.SphereGeometry(0.08, 40, 28);
+    const mat = new THREE.MeshStandardMaterial({ color:0xffffff, emissive:0x222222, emissiveIntensity:0.35, metalness:0.1, roughness:0.35 });
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(0,1.6,-0.8);
+    scene.add(m);
+    window.__smallGlobe = { mesh:m, t:0, hue:0, params:{ show:true, spd:1.1, rad:1.4, yAmp:0.5, front:true, frontDist:0.8 } };
+  }
+  const globe2 = window.__smallGlobe;
+
+  function setHue(mesh, h, eScale){
+    const c = new THREE.Color().setHSL((h%1+1)%1, 0.85, 0.55);
+    mesh.material.color.copy(c);
+    mesh.material.emissive.copy(c).multiplyScalar(eScale);
+    mesh.material.needsUpdate = true;
+  }
+
+  function frontLockPosition(dist, lateral){
+    const cam = renderer.xr && renderer.xr.isPresenting ? renderer.xr.getCamera(camera) : camera;
+    const camPos = new THREE.Vector3(); cam.getWorldPosition(camPos);
+    const forward = new THREE.Vector3(); cam.getWorldDirection(forward).normalize();
+    const up = new THREE.Vector3(0,1,0);
+    const right = new THREE.Vector3().crossVectors(forward, up).normalize();
+    return camPos.clone().add(forward.multiplyScalar(dist)).add(right.multiplyScalar(lateral||0));
+  }
+
+  function enforceFrontRule(){
+    if (!globe.params.front && !globe2.params.front){
+      globe2.params.front = true; const sel = $('g2Front'); if (sel) sel.value = 'on';
+    }
+  }
+
+  function step(dt){
+    // big globe
+    globe.mesh.visible = globe.params.show;
+    globe.t += dt * (globe.params.spd||1.2);
+    if (globe.params.front){
+      globe.mesh.position.copy( frontLockPosition(globe.params.frontDist||0.9, -0.15) );
+    } else {
+      const cam = renderer.xr && renderer.xr.isPresenting ? renderer.xr.getCamera(camera) : camera;
+      const camPos = new THREE.Vector3(); cam.getWorldPosition(camPos);
+      const r = (globe.params.rad||2.0)*(0.6+0.4*Math.sin(globe.t*0.33));
+      const x = Math.sin(globe.t*0.9)*r, z = Math.cos(globe.t*1.37)*r;
+      const y = 1.2 + Math.sin(globe.t*1.7)*(globe.params.yAmp||0.6);
+      globe.mesh.position.set(camPos.x+x,y,camPos.z+z);
+    }
+    if (globe.params.colorMode==='rainbow'){
+      globe.hue = (globe.hue + dt*0.12)%1;
+    }
+    setHue(globe.mesh, globe.hue, 0.35);
+
+    // small globe: complementary color
+    globe2.mesh.visible = globe2.params.show;
+    globe2.t += dt * (globe2.params.spd||1.1);
+    if (globe2.params.front){
+      globe2.mesh.position.copy( frontLockPosition(globe2.params.frontDist||0.8, +0.15) );
+    } else {
+      const cam = renderer.xr && renderer.xr.isPresenting ? renderer.xr.getCamera(camera) : camera;
+      const camPos = new THREE.Vector3(); cam.getWorldPosition(camPos);
+      const r2 = (globe2.params.rad||1.4)*(0.6+0.4*Math.cos(globe2.t*0.27));
+      const x2 = Math.cos(globe2.t*1.05)*r2, z2 = Math.sin(globe2.t*1.31)*r2;
+      const y2 = 1.2 + Math.cos(globe2.t*1.4)*(globe2.params.yAmp||0.5);
+      globe2.mesh.position.set(camPos.x+x2,y2,camPos.z+z2);
+    }
+    const compHue = (globe.hue + 0.5) % 1;
+    setHue(globe2.mesh, compHue, 0.32);
+  }
+
+  // UI bindings
+  const g2Show=$('g2Show'), g2Front=$('g2Front'), g2Spd=$('g2Spd'), g2Rad=$('g2Rad'), g2Y=$('g2Y');
+  if (g2Show) g2Show.addEventListener('input', e=>{ globe2.params.show=(e.target.value==='on'); });
+  if (g2Front) g2Front.addEventListener('input', e=>{
+    globe2.params.front=(e.target.value==='on');
+    if (!globe2.params.front && !globe.params.front){ globe2.params.front=true; e.target.value='on'; }
+  });
+  if (g2Spd) g2Spd.addEventListener('input', e=>{ globe2.params.spd=parseFloat(e.target.value)||1.1; $('g2SpdV').textContent=globe2.params.spd.toFixed(2); });
+  if (g2Rad) g2Rad.addEventListener('input', e=>{ globe2.params.rad=parseFloat(e.target.value)||1.4; $('g2RadV').textContent=globe2.params.rad.toFixed(2); });
+  if (g2Y)   g2Y.addEventListener('input', e=>{ globe2.params.yAmp=parseFloat(e.target.value)||0.5; $('g2YV').textContent=globe2.params.yAmp.toFixed(2); });
+
+  enforceFrontRule();
+
+  // piggyback on existing render loop; if not accessible, make our own lightweight loop
+  let last = performance.now();
+  function loop(){
+    const now = performance.now();
+    const dt = Math.min(0.033, (now-last)/1000); last = now;
+    try{ step(dt); }catch(e){ /* ignore */ }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();</script>
+</body>
+</html>
